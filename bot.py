@@ -75,7 +75,7 @@ async def on_wavelink_node_ready(node: wavelink.Node):
 # ======================
 # TRACK END HANDLER
 # ======================
-@wavelink.WavelinkMixin.listener()
+@bot.event
 async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
     player = payload.player
 
