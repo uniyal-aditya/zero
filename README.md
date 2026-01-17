@@ -1,4 +1,10 @@
-# RAFTXR — Discord Music Bot (Pure Python)
+# Zero™ — Discord Music Bot
+
+**Zero™** is a modern, high-performance Discord music bot built with  
+**Python**, **discord.py**, and **Lavalink**.
+
+> Absolute control over sound.
+
 
 ## Features
 - Slash commands (play, skip, pause, resume, stop, nowplaying, queue, volume)

@@ -1,8 +1,6 @@
 discord.py>=2.4.0
-wavelink>=1.0.0
+wavelink>=1.4.0
 python-dotenv
-requests
+aiosqlite
+lyricsgenius
 aiohttp
-# Optional (uncomment if you want lyrics support)
-# lyricsgenius
-# spotipy

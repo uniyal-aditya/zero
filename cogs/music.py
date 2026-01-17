@@ -9,218 +9,290 @@ from typing import Optional
 from core.player import MusicPlayer
 from core.utils import is_youtube_url, is_spotify_url, extract_spotify_id
 import config
-import requests
 
 class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.bot.players = {}  # guild_id -> MusicPlayer
+        # guild_id -> player will be handled by wavelink/guild voice client
 
-    # Helper to get or create a player for a guild
-    async def get_player(self, guild: discord.Guild) -> MusicPlayer:
-        vc = guild.voice_client
-        if vc and isinstance(vc, MusicPlayer):
-            return vc
+    async def ensure_voice(self, ctx_or_inter):
+        # accepts either commands.Context or discord.Interaction
+        if isinstance(ctx_or_inter, discord.Interaction):
+            user = ctx_or_inter.user
+            send = ctx_or_inter.response
+            ep = True
+        else:
+            user = ctx_or_inter.author
+            send = None
+            ep = False
 
-        # create new player by connecting to node
-        node = wavelink.NodePool.get_node()
-        player = MusicPlayer(bot=self.bot, guild=guild, node=node)
-        self.bot.players[guild.id] = player
-        return player
-
-    async def ensure_voice(self, interaction: discord.Interaction) -> Optional[MusicPlayer]:
-        if not interaction.user.voice or not interaction.user.voice.channel:
-            await interaction.response.send_message("Join a voice channel first.", ephemeral=True)
+        if not getattr(user, "voice", None) or not user.voice.channel:
+            if send:
+                await ctx_or_inter.response.send_message("❌ Join a voice channel first.", ephemeral=True)
+            else:
+                await ctx_or_inter.send("❌ Join a voice channel first.")
             return None
 
-        guild = interaction.guild
+        guild = user.guild if hasattr(user, "guild") else ctx_or_inter.guild
         vc = guild.voice_client
         if not vc:
-            # connect using wavelink Player
-            channel = interaction.user.voice.channel
+            # connect using our custom MusicPlayer
+            channel = user.voice.channel
             await channel.connect(cls=MusicPlayer)
             vc = guild.voice_client
-
         return vc
 
+    # ---------- JOIN ----------
+    @commands.command(name="join")
+    async def join_prefix(self, ctx: commands.Context):
+        vc = await self.ensure_voice(ctx)
+        if not vc:
+            return
+        await ctx.send("✅ Joined your voice channel.")
+
     @app_commands.command(name="join", description="Make the bot join your voice channel")
-    async def join(self, interaction: discord.Interaction):
+    async def join_slash(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         vc = await self.ensure_voice(interaction)
         if not vc:
             return
         await interaction.followup.send("✅ Joined your voice channel.", ephemeral=True)
 
-    @app_commands.describe(query="YouTube link, Spotify link, or search term")
-    @app_commands.command(name="play", description="Play a song by link or search")
-    async def play(self, interaction: discord.Interaction, query: str):
+    # ---------- PLAY ----------
+    @commands.command(name="play", aliases=["p"])
+    async def play_prefix(self, ctx: commands.Context, *, query: str):
+        await self._play(ctx, query)
+
+    @app_commands.describe(query="YouTube, Spotify link, or search term")
+    @app_commands.command(name="play", description="Play a song (YT/Spotify/name)")
+    async def play_slash(self, interaction: discord.Interaction, query: str):
         await interaction.response.defer()
-        vc = await self.ensure_voice(interaction)
+        # create a fake context-like object carrying interaction
+        await self._play(interaction, query)
+
+    async def _play(self, ctx_or_inter, query: str):
+        is_interaction = isinstance(ctx_or_inter, discord.Interaction)
+        if is_interaction:
+            interaction = ctx_or_inter
+            await interaction.response.defer()
+        else:
+            ctx = ctx_or_inter
+
+        vc = await self.ensure_voice(ctx_or_inter)
         if not vc:
             return
 
-        # Resolve query: youtube or spotify or search
-        if is_youtube_url(query):
-            # let wavelink handle youtube url
-            tracks = await wavelink.YouTubeTrack.search(query, return_first=False)
-            if not tracks:
-                await interaction.followup.send("No results found for that YouTube link.")
-                return
-            # if playlist, tracks might be a Playlist object
-            if isinstance(tracks, wavelink.TrackPlaylist):
-                await vc.queue.add_tracks(tracks.tracks)
-                await interaction.followup.send(f"📂 Added playlist with {len(tracks.tracks)} tracks.")
+        # resolve track(s)
+        try:
+            if is_youtube_url(query):
+                tracks = await wavelink.YouTubeTrack.search(query, return_first=False)
             else:
-                await vc.queue.put(tracks[0])
-                await interaction.followup.send(f"🎶 Added **{tracks[0].title}** to queue.")
-        elif is_spotify_url(query):
-            # Spotify link: try to resolve via Spotify API if credentials present, otherwise search YouTube
-            spotify_id = extract_spotify_id(query)
-            typ, sid = spotify_id
-            if os.getenv("SPOTIFY_CLIENT_ID") and os.getenv("SPOTIFY_CLIENT_SECRET"):
-                # Minimal Spotify metadata fetch (Client Credentials)
-                token = self._get_spotify_token()
-                if token:
-                    if typ == "track":
-                        meta = self._get_spotify_track(token, sid)
-                        if meta:
-                            # search YouTube with artist - title
-                            q = f"{meta['artists'][0]['name']} - {meta['name']}"
-                            tracks = await wavelink.YouTubeTrack.search(q, return_first=True)
-                            if not tracks:
-                                await interaction.followup.send("Could not resolve Spotify track to YouTube.")
-                                return
-                            await vc.queue.put(tracks)
-                            await interaction.followup.send(f"🎶 Added **{tracks.title}** (from Spotify link)")
-                            if not vc.playing:
-                                await vc.play(await vc.queue.get())
-                            return
-                    # playlist/album handling can be added similarly
-            # fallback: search YouTube using raw link text
-            tracks = await wavelink.YouTubeTrack.search(query, return_first=False)
-            if not tracks:
-                # as last resort, search by the textual portion after last slash
-                q = query.split("/")[-1]
-                tracks = await wavelink.YouTubeTrack.search(q, return_first=False)
-            if not tracks:
-                await interaction.followup.send("Couldn't resolve Spotify link.")
-                return
-            # pick first track
-            await vc.queue.put(tracks[0])
-            await interaction.followup.send(f"🎶 Added **{tracks[0].title}** (resolved from Spotify link)")
-        else:
-            # treat as search term
-            found = await wavelink.YouTubeTrack.search(query, return_first=False)
-            if not found:
-                await interaction.followup.send("No results found.")
-                return
-            track = found[0]
-            await vc.queue.put(track)
-            await interaction.followup.send(f"🎶 Added **{track.title}** to queue")
+                # treat as search term
+                tracks = await wavelink.YouTubeTrack.search(query, return_first=False)
+        except Exception:
+            if is_interaction:
+                await interaction.followup.send("❌ Error searching for track.", ephemeral=True)
+            else:
+                await ctx.send("❌ Error searching for track.")
+            return
 
-        # auto-play if not playing
+        if not tracks:
+            if is_interaction:
+                await interaction.followup.send("❌ No results found.", ephemeral=True)
+            else:
+                await ctx.send("❌ No results found.")
+            return
+
+        # playlists returned as TrackPlaylist by wavelink
+        if isinstance(tracks, wavelink.TrackPlaylist):
+            await vc.queue.add_tracks(tracks.tracks)
+            msg = f"📂 Added playlist with {len(tracks.tracks)} tracks."
+            if is_interaction:
+                await interaction.followup.send(msg)
+            else:
+                await ctx.send(msg)
+        else:
+            track = tracks[0]
+            await vc.queue.put(track)
+            msg = f"🎶 Added **{track.title}** to queue."
+            if is_interaction:
+                await interaction.followup.send(msg)
+            else:
+                await ctx.send(msg)
+
         if not vc.playing and not vc.is_paused():
             if not vc.queue.is_empty():
-                next_track = await vc.queue.get()
-                await vc.play(next_track)
+                nxt = await vc.queue.get()
+                await vc.play(nxt)
+
+    # ---------- SKIP ----------
+    @commands.command(name="skip")
+    async def skip_prefix(self, ctx: commands.Context):
+        vc = ctx.guild.voice_client
+        if not vc or not vc.playing:
+            return await ctx.send("❌ Nothing playing.")
+        await vc.stop()
+        await ctx.send("⏭️ Skipped.")
 
     @app_commands.command(name="skip", description="Skip current track")
-    async def skip(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+    async def skip_slash(self, interaction: discord.Interaction):
         vc = interaction.guild.voice_client
         if not vc or not vc.playing:
-            await interaction.followup.send("❌ Nothing is playing.", ephemeral=True)
-            return
+            return await interaction.response.send_message("❌ Nothing playing.", ephemeral=True)
         await vc.stop()
-        await interaction.followup.send("⏭️ Skipped.", ephemeral=True)
+        await interaction.response.send_message("⏭️ Skipped.", ephemeral=True)
 
-    @app_commands.command(name="pause", description="Pause playback")
-    async def pause(self, interaction: discord.Interaction):
-        vc = interaction.guild.voice_client
+    # ---------- SKIPTO ----------
+    @commands.command(name="skipto")
+    async def skipto_prefix(self, ctx: commands.Context, position: int):
+        vc: MusicPlayer = ctx.guild.voice_client
+        if not vc:
+            return await ctx.send("Not connected.")
+        if position <= 0:
+            return await ctx.send("Position must be >= 1")
+        q = vc.queue.as_list()
+        if position > len(q):
+            return await ctx.send("Position out of range.")
+        # remove first (position-1) tracks
+        for _ in range(position-1):
+            # drop from _list
+            q.pop(0)
+        # rebuild queue
+        vc.queue._list = q
+        vc.queue._queue = asyncio.Queue()
+        for item in q:
+            vc.queue._queue.put_nowait(item)
+        # stop current to play next
+        await vc.stop()
+        await ctx.send(f"⏭ Skipped to position {position}.")
+
+    @app_commands.describe(position="Queue position (1-based)")
+    @app_commands.command(name="skipto", description="Skip to a position in the queue")
+    async def skipto_slash(self, interaction: discord.Interaction, position: int):
+        await interaction.response.defer(ephemeral=True)
+        # reuse prefix implementation context
+        fake_ctx = interaction
+        await self.skipto_prefix.__wrapped__(self, fake_ctx, position)
+        await interaction.followup.send(f"⏭ Skipped to {position}", ephemeral=True)
+
+    # ---------- PREVIOUS & NEXT (history navigation) ----------
+    @commands.command(name="next")
+    async def next_prefix(self, ctx: commands.Context):
+        vc: MusicPlayer = ctx.guild.voice_client
+        if not vc:
+            return await ctx.send("Not connected.")
+        if not vc.queue.is_empty():
+            await vc.stop()
+            return await ctx.send("⏭ Playing next.")
+        return await ctx.send("No next track.")
+
+    @commands.command(name="previous")
+    async def previous_prefix(self, ctx: commands.Context):
+        vc: MusicPlayer = ctx.guild.voice_client
+        if not vc:
+            return await ctx.send("Not connected.")
+        # naive previous: try pop last from history
+        if hasattr(vc, "_history") and len(vc._history) >= 1:
+            prev = vc._history.pop()
+            await vc.queue._list.insert(0, prev)
+            await vc.queue._queue.put_nowait(prev)
+            await vc.stop()
+            return await ctx.send("⏮ Playing previous.")
+        return await ctx.send("No previous track available.")
+
+    # ---------- SEEK (forward/backward) ----------
+    @commands.command(name="forward")
+    async def forward_prefix(self, ctx: commands.Context, seconds: int):
+        vc: MusicPlayer = ctx.guild.voice_client
+        if not vc or not vc.current_track:
+            return await ctx.send("Nothing is playing.")
+        pos = vc.position / 1000  # ms -> s
+        new_pos = min((vc.current_track.length/1000)-1, pos + seconds)
+        await vc.seek(int(new_pos*1000))
+        await ctx.send(f"⏩ Forwarded {seconds}s.")
+
+    @commands.command(name="backward")
+    async def backward_prefix(self, ctx: commands.Context, seconds: int):
+        vc: MusicPlayer = ctx.guild.voice_client
+        if not vc or not vc.current_track:
+            return await ctx.send("Nothing is playing.")
+        pos = vc.position / 1000
+        new_pos = max(0, pos - seconds)
+        await vc.seek(int(new_pos*1000))
+        await ctx.send(f"⏪ Rewinded {seconds}s.")
+
+    # ---------- PAUSE / RESUME ----------
+    @commands.command(name="pause")
+    async def pause_prefix(self, ctx: commands.Context):
+        vc = ctx.guild.voice_client
         if not vc or not vc.playing:
-            await interaction.response.send_message("❌ Nothing playing.", ephemeral=True)
-            return
+            return await ctx.send("Nothing is playing.")
         await vc.pause()
-        await interaction.response.send_message("⏸️ Paused.", ephemeral=True)
+        await ctx.send("⏸️ Paused.")
 
-    @app_commands.command(name="resume", description="Resume playback")
-    async def resume(self, interaction: discord.Interaction):
-        vc = interaction.guild.voice_client
+    @commands.command(name="resume")
+    async def resume_prefix(self, ctx: commands.Context):
+        vc = ctx.guild.voice_client
         if not vc:
-            await interaction.response.send_message("❌ Bot not connected.", ephemeral=True)
-            return
+            return await ctx.send("Not connected.")
         await vc.resume()
-        await interaction.response.send_message("▶️ Resumed.", ephemeral=True)
+        await ctx.send("▶️ Resumed.")
 
-    @app_commands.command(name="stop", description="Stop playback and clear queue")
-    async def stop(self, interaction: discord.Interaction):
-        vc = interaction.guild.voice_client
+    # ---------- STOP / LEAVE ----------
+    @commands.command(name="stop")
+    async def stop_prefix(self, ctx: commands.Context):
+        vc = ctx.guild.voice_client
         if not vc:
-            await interaction.response.send_message("❌ Not connected.", ephemeral=True)
-            return
+            return await ctx.send("Not connected.")
         vc.queue.clear()
         await vc.stop()
         await vc.disconnect()
-        await interaction.response.send_message("⏹️ Stopped and left the voice channel.")
+        await ctx.send("⏹️ Stopped and left the channel.")
 
-    @app_commands.command(name="nowplaying", description="Show current playing song")
-    async def nowplaying(self, interaction: discord.Interaction):
-        vc = interaction.guild.voice_client
+    @commands.command(name="leave")
+    async def leave_prefix(self, ctx: commands.Context):
+        vc = ctx.guild.voice_client
+        if not vc:
+            return await ctx.send("Not connected.")
+        await vc.disconnect()
+        await ctx.send("Left the channel.")
+
+    # ---------- NOW PLAYING ----------
+    @commands.command(name="nowplaying", aliases=["np"])
+    async def nowplaying_prefix(self, ctx: commands.Context):
+        vc = ctx.guild.voice_client
         if not vc or not vc.current_track:
-            await interaction.response.send_message("❌ Nothing is playing.", ephemeral=True)
-            return
-        track = vc.current_track
-        embed = discord.Embed(title="Now Playing", description=f"**{track.title}**", color=discord.Color.blurple())
-        embed.add_field(name="Duration", value=str(track.length/1000) + "s", inline=True)
-        embed.add_field(name="Requested by", value="N/A", inline=True)
-        await interaction.response.send_message(embed=embed)
+            return await ctx.send("Nothing is playing.")
+        tr = vc.current_track
+        embed = discord.Embed(title="Now Playing", description=f"**{tr.title}**", color=discord.Color.blurple())
+        embed.add_field(name="Author", value=getattr(tr, "author", "Unknown"), inline=True)
+        embed.add_field(name="Duration", value=f"{int(tr.length/1000)}s", inline=True)
+        await ctx.send(embed=embed)
 
-    @app_commands.command(name="queue", description="Show the queue")
-    async def queue_cmd(self, interaction: discord.Interaction):
-        vc = interaction.guild.voice_client
+    # ---------- QUEUE ----------
+    @commands.command(name="queue")
+    async def queue_prefix(self, ctx: commands.Context):
+        vc = ctx.guild.voice_client
         if not vc or vc.queue.is_empty():
-            await interaction.response.send_message("Queue is empty.", ephemeral=True)
-            return
+            return await ctx.send("Queue is empty.")
         lst = vc.queue.as_list()
         lines = []
-        for i, t in enumerate(lst[:10], start=1):
+        for i, t in enumerate(lst[:15], start=1):
             lines.append(f"`{i}.` {t.title} [{int(t.length/1000)}s]")
-        content = "\n".join(lines)
-        await interaction.response.send_message(f"**Queue (next 10):**\n{content}")
+        await ctx.send("**Queue (next 15):**\n" + "\n".join(lines))
 
-    @app_commands.describe(volume="0-200")
-    @app_commands.command(name="volume", description="Set player volume")
-    async def volume(self, interaction: discord.Interaction, volume: int):
-        vc = interaction.guild.voice_client
+    # ---------- VOLUME ----------
+    @commands.command(name="volume")
+    async def volume_prefix(self, ctx: commands.Context, volume: int):
+        vc = ctx.guild.voice_client
         if not vc:
-            await interaction.response.send_message("Not connected.", ephemeral=True)
-            return
-        if volume < 0 or volume > 200:
-            await interaction.response.send_message("Volume must be between 0 and 200.", ephemeral=True)
-            return
+            return await ctx.send("Not connected.")
+        if volume < 0 or volume > config.MAX_VOLUME:
+            return await ctx.send(f"Volume must be between 0 and {config.MAX_VOLUME}.")
         await vc.set_volume(volume)
-        await interaction.response.send_message(f"🔊 Volume set to {volume}%")
+        await ctx.send(f"🔊 Volume set to {volume}%")
 
-    # --- Optional simple Spotify helper
-    def _get_spotify_token(self):
-        """Client credentials flow"""
-        cid = os.getenv("SPOTIFY_CLIENT_ID")
-        secret = os.getenv("SPOTIFY_CLIENT_SECRET")
-        if not cid or not secret:
-            return None
-        token_url = "https://accounts.spotify.com/api/token"
-        r = requests.post(token_url, data={"grant_type": "client_credentials"}, auth=(cid, secret))
-        if r.status_code != 200:
-            return None
-        return r.json().get("access_token")
-
-    def _get_spotify_track(self, token, track_id):
-        url = f"https://api.spotify.com/v1/tracks/{track_id}"
-        r = requests.get(url, headers={"Authorization": f"Bearer {token}"})
-        if r.status_code != 200:
-            return None
-        return r.json()
-
+    # Lavalink track end forwarded to player.do_next in bot main
 
 async def setup(bot):
     await bot.add_cog(Music(bot))
