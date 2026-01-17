@@ -64,7 +64,7 @@ class Help(commands.Cog):
         if not category:
             embed = discord.Embed(title=f"{config.BOT_NAME} — Help", color=discord.Color.blurple())
             embed.description = "Use `.help <category>` to view details. Categories available:\n\n" + ", ".join(self.HELP_CATEGORIES.keys())
-            embed.set_footer(text="RAFTXR • polished help panel")
+            embed.set_footer(text="Zero™ • polished help panel")
             return await ctx.send(embed=embed)
         category = category.title()
         if category not in self.HELP_CATEGORIES:
@@ -80,7 +80,7 @@ class Help(commands.Cog):
         if not category:
             embed = discord.Embed(title=f"{config.BOT_NAME} — Help", color=discord.Color.blurple())
             embed.description = "Use `/help <category>` to view details. Categories available:\n\n" + ", ".join(self.HELP_CATEGORIES.keys())
-            embed.set_footer(text="RAFTXR • polished help panel")
+            embed.set_footer(text="Zero™ • polished help panel")
             return await interaction.followup.send(embed=embed, ephemeral=True)
         category = category.title()
         if category not in self.HELP_CATEGORIES:
