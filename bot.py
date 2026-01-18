@@ -75,15 +75,6 @@ async def on_wavelink_node_ready(node: wavelink.Node):
 # ======================
 # TRACK END HANDLER
 # ======================
-@bot.event
-async def on_wavelink_track_end(payload: wavelink.TrackEndEventPayload):
-    player = payload.player
-
-    try:
-        if hasattr(player, "do_next"):
-            await player.do_next()
-    except Exception as e:
-        print("Error handling track end:", e)
 
 
 # ======================
