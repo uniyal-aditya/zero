@@ -1,38 +1,40 @@
-# bot.py
 import os
+import asyncio
 import discord
 from discord.ext import commands
-import wavelink
 from dotenv import load_dotenv
-import asyncio
+import wavelink
+
 import config
 from core.db import Database
 
 # ======================
-# ENV
+# LOAD ENV
 # ======================
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 APP_ID = os.getenv("APPLICATION_ID")
 
-LAVA_HOST = os.getenv("LAVALINK_HOST", "127.0.0.1")
-LAVA_PORT = int(os.getenv("LAVALINK_PORT", 2333))
-LAVA_PASS = os.getenv("LAVALINK_PASSWORD", "youshallnotpass")
-
-if not TOKEN:
-    raise RuntimeError("DISCORD_TOKEN is missing in .env")
+LAVA_HOST = os.getenv("LAVALINK_HOST")
+LAVA_PORT = int(os.getenv("LAVALINK_PORT"))
+LAVA_PASS = os.getenv("LAVALINK_PASSWORD")
 
 # ======================
-# BOT SETUP
+# INTENTS
 # ======================
 intents = discord.Intents.default()
 intents.message_content = True
+intents.voice_states = True
 
+# ======================
+# BOT INSTANCE (ONLY ONE)
+# ======================
 bot = commands.Bot(
-    command_prefix=config.PREFIX,
+    command_prefix=".",
     intents=intents,
-    application_id=APP_ID
+    application_id=APP_ID,
+    help_command=None
 )
 
 bot.db = Database()
@@ -44,10 +46,10 @@ bot.db = Database()
 async def on_ready():
     print(f"{config.BOT_NAME} is online as {bot.user} (ID: {bot.user.id})")
 
-    # Init DB
+    # Init database
     await bot.db.init()
 
-    # Lavalink node
+    # Lavalink
     if not wavelink.NodePool.nodes:
         await wavelink.NodePool.create_node(
             bot=bot,
@@ -66,16 +68,14 @@ async def on_ready():
         )
     )
 
+    # Sync slash commands
+    await bot.tree.sync()
+    print("Slash commands synced.")
     print("Zero™ is fully ready.")
 
 @bot.event
 async def on_wavelink_node_ready(node: wavelink.Node):
     print(f"Lavalink node ready: {node.identifier}")
-
-# ======================
-# TRACK END HANDLER
-# ======================
-
 
 # ======================
 # EXTENSIONS
