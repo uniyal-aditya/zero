@@ -77,6 +77,15 @@ async def on_ready():
 async def on_wavelink_node_ready(node: wavelink.Node):
     print(f"Lavalink node ready: {node.identifier}")
 
+@bot.event
+async def on_message(message: discord.Message):
+    if message.author.bot:
+        return
+
+    # VERY IMPORTANT: allow prefix & hybrid commands to work
+    await bot.process_commands(message)
+
+
 # ======================
 # EXTENSIONS
 # ======================
