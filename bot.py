@@ -81,9 +81,8 @@ async def on_wavelink_node_ready(node: wavelink.Node):
 async def on_message(message: discord.Message):
     if message.author.bot:
         return
-
-    # VERY IMPORTANT: allow prefix & hybrid commands to work
     await bot.process_commands(message)
+
 
 
 # ======================
