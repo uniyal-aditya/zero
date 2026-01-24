@@ -1,38 +1,37 @@
+# cogs/playlist.py
 from discord.ext import commands
-import wavelink
 
 class Playlist(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.db = bot.db
 
-    @commands.command()
-    async def playlist(self, ctx, action, name=None):
-        if action == "create":
-            await self.bot.db.create_playlist(ctx.author.id, name)
-            return await ctx.send(f"📁 Playlist `{name}` created.")
+    @commands.command(name="pl-create")
+    async def pl_create(self, ctx: commands.Context, *, name: str):
+        await self.db.create_playlist(ctx.author.id, name)
+        await ctx.send(f"Created playlist `{name}`.")
 
-        if action == "add":
-            vc = ctx.guild.voice_client
-            if not vc or not vc.current_track:
-                return await ctx.send("Nothing playing.")
-            ok = await self.bot.db.add_track(
-                ctx.author.id, name,
-                vc.current_track.title,
-                vc.current_track.uri
-            )
-            return await ctx.send("✅ Added to playlist." if ok else "Playlist not found.")
+    @commands.command(name="pl-add")
+    async def pl_add(self, ctx: commands.Context, playlist: str, *, url: str):
+        # Basic: uses title=url for now
+        ok = await self.db.add_track_to_playlist(ctx.author.id, playlist, url, url)
+        if ok:
+            await ctx.send(f"Added track to `{playlist}`.")
+        else:
+            await ctx.send("Playlist not found.")
 
-        if action == "play":
-            tracks = await self.bot.db.get_playlist(ctx.author.id, name)
-            if not tracks:
-                return await ctx.send("Playlist empty or not found.")
-            vc = ctx.guild.voice_client
-            for title, url in tracks:
-                track = await wavelink.YouTubeTrack.search(url, return_first=True)
-                await vc.queue.put(track)
-            if not vc.playing:
-                await vc.play(await vc.queue.get())
-            await ctx.send(f"▶ Playing playlist `{name}`.")
+    @commands.command(name="pl-play")
+    async def pl_play(self, ctx: commands.Context, playlist: str):
+        rows = await self.db.get_playlist_tracks(ctx.author.id, playlist)
+        if not rows:
+            return await ctx.send("Playlist not found or empty.")
+        # For simplicity, push to queue sequentially
+        vc = ctx.guild.voice_client
+        if not vc:
+            await ctx.author.voice.channel.connect(cls=self.bot.get_cog("Music").__class__.player)
+        for title, url in rows:
+            await vc.queue.put(url)
+        await ctx.send(f"Queued {len(rows)} tracks from `{playlist}`.")
 
 async def setup(bot):
     await bot.add_cog(Playlist(bot))

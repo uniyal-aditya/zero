@@ -1,26 +1,26 @@
 # core/utils.py
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
-SPOTIFY_TRACK_RE = re.compile(r"(?:https?://)?(?:open\.)?spotify\.com/track/([A-Za-z0-9]+)")
-SPOTIFY_PLAYLIST_RE = re.compile(r"(?:https?://)?(?:open\.)?spotify\.com/playlist/([A-Za-z0-9]+)")
-SPOTIFY_ALBUM_RE = re.compile(r"(?:https?://)?(?:open\.)?spotify\.com/album/([A-Za-z0-9]+)")
+YOUTUBE_RE = re.compile(r"(?:youtube\.com|youtu\.be)")
+SPOTIFY_RE = re.compile(r"open\.spotify\.com|spotify:")
 
-def is_youtube_url(query: str) -> bool:
-    parsed = urlparse(query)
-    return parsed.netloc and ("youtube" in parsed.netloc or "youtu.be" in parsed.netloc)
+def is_youtube_url(text: str) -> bool:
+    if not text:
+        return False
+    return bool(YOUTUBE_RE.search(text))
 
-def is_spotify_url(query: str) -> bool:
-    return "spotify.com" in query
+def is_spotify_url(text: str) -> bool:
+    if not text:
+        return False
+    return bool(SPOTIFY_RE.search(text))
 
-def extract_spotify_id(query: str):
-    m = SPOTIFY_TRACK_RE.search(query)
-    if m:
-        return ("track", m.group(1))
-    m = SPOTIFY_PLAYLIST_RE.search(query)
-    if m:
-        return ("playlist", m.group(1))
-    m = SPOTIFY_ALBUM_RE.search(query)
-    if m:
-        return ("album", m.group(1))
-    return (None, None)
+def extract_spotify_id(url: str) -> str | None:
+    # supports open.spotify.com/track/<id> or spotify:track:<id>
+    if "open.spotify.com" in url:
+        parts = url.split("/")
+        if len(parts) >= 5:
+            return parts[4].split("?")[0]
+    if url.startswith("spotify:"):
+        return url.split(":")[-1]
+    return None
