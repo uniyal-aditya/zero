@@ -2,9 +2,13 @@
 import aiosqlite
 import asyncio
 import time
+import os
+import typing
 import config
 
-CREATE = """
+DB_PATH = os.getenv("DB_PATH", config.DB_PATH)
+
+CREATE_TABLES = """
 CREATE TABLE IF NOT EXISTS liked_songs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -15,13 +19,9 @@ CREATE TABLE IF NOT EXISTS liked_songs (
     added_at INTEGER
 );
 
-CREATE TABLE IF NOT EXISTS premium_users (
-    user_id INTEGER PRIMARY KEY
-);
-
-CREATE TABLE IF NOT EXISTS guild_247 (
+CREATE TABLE IF NOT EXISTS premium_guilds (
     guild_id INTEGER PRIMARY KEY,
-    enabled INTEGER
+    granted_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS playlists (
@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS playlists (
 );
 
 CREATE TABLE IF NOT EXISTS playlist_tracks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
     playlist_id INTEGER,
     title TEXT,
     url TEXT
@@ -39,20 +38,23 @@ CREATE TABLE IF NOT EXISTS playlist_tracks (
 """
 
 class Database:
-    def __init__(self, path: str = config.DB_PATH):
+    def __init__(self, path: str = DB_PATH):
         self.path = path
+        # single connection approach often fine; using connect per-op for reliability
         self._lock = asyncio.Lock()
 
     async def init(self):
         async with aiosqlite.connect(self.path) as db:
-            await db.executescript(CREATE)
+            await db.executescript(CREATE_TABLES)
             await db.commit()
 
-    # Liked songs
+    # ---------- liked songs ----------
     async def add_liked(self, user_id: int, track_uri: str, title: str, author: str, length: int):
         async with aiosqlite.connect(self.path) as db:
-            await db.execute("INSERT INTO liked_songs (user_id, track_uri, title, author, length, added_at) VALUES (?, ?, ?, ?, ?, ?)",
-                             (user_id, track_uri, title, author, length, int(time.time())))
+            await db.execute(
+                "INSERT INTO liked_songs (user_id, track_uri, title, author, length, added_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, track_uri, title, author, length, int(time.time()))
+            )
             await db.commit()
 
     async def get_liked(self, user_id: int, limit: int = 100):
@@ -71,45 +73,30 @@ class Database:
             await db.execute("DELETE FROM liked_songs WHERE user_id = ?", (user_id,))
             await db.commit()
 
-    # Premium
-    async def is_premium_user(self, user_id: int):
+    # ---------- premium ----------
+    async def grant_guild_premium(self, guild_id: int):
         async with aiosqlite.connect(self.path) as db:
-            cur = await db.execute("SELECT 1 FROM premium_users WHERE user_id = ?", (user_id,))
-            return await cur.fetchone() is not None
-
-    async def set_247(self, guild_id: int, enabled: bool):
-        async with aiosqlite.connect(self.path) as db:
-            await db.execute("INSERT OR REPLACE INTO guild_247 (guild_id, enabled) VALUES (?, ?)", (guild_id, int(enabled)))
+            await db.execute("INSERT OR REPLACE INTO premium_guilds (guild_id, granted_at) VALUES (?, ?)", (guild_id, int(time.time())))
             await db.commit()
 
-    async def is_247(self, guild_id: int):
+    async def revoke_guild_premium(self, guild_id: int):
         async with aiosqlite.connect(self.path) as db:
-            cur = await db.execute("SELECT enabled FROM guild_247 WHERE guild_id = ?", (guild_id,))
-            row = await cur.fetchone()
-            return row and row[0] == 1
+            await db.execute("DELETE FROM premium_guilds WHERE guild_id = ?", (guild_id,))
+            await db.commit()
 
-    # Playlists
+    async def is_guild_premium(self, guild_id: int) -> bool:
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute("SELECT 1 FROM premium_guilds WHERE guild_id = ?", (guild_id,))
+            row = await cur.fetchone()
+            return row is not None
+
+    # ---------- playlists ----------
     async def create_playlist(self, user_id: int, name: str):
         async with aiosqlite.connect(self.path) as db:
             await db.execute("INSERT INTO playlists (user_id, name) VALUES (?, ?)", (user_id, name))
             await db.commit()
 
-    async def add_track_to_playlist(self, user_id: int, playlist_name: str, title: str, url: str):
+    async def add_playlist_track(self, playlist_id: int, title: str, url: str):
         async with aiosqlite.connect(self.path) as db:
-            cur = await db.execute("SELECT id FROM playlists WHERE user_id = ? AND name = ?", (user_id, playlist_name))
-            pid = await cur.fetchone()
-            if not pid:
-                return False
-            await db.execute("INSERT INTO playlist_tracks (playlist_id, title, url) VALUES (?, ?, ?)", (pid[0], title, url))
+            await db.execute("INSERT INTO playlist_tracks (playlist_id, title, url) VALUES (?, ?, ?)", (playlist_id, title, url))
             await db.commit()
-            return True
-
-    async def get_playlist_tracks(self, user_id: int, playlist_name: str):
-        async with aiosqlite.connect(self.path) as db:
-            cur = await db.execute("""
-                SELECT title, url FROM playlist_tracks
-                WHERE playlist_id = (
-                    SELECT id FROM playlists WHERE user_id = ? AND name = ?
-                )
-            """, (user_id, playlist_name))
-            return await cur.fetchall()

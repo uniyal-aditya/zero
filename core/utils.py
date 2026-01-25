@@ -1,26 +1,11 @@
 # core/utils.py
 import re
-from urllib.parse import urlparse, parse_qs
 
-YOUTUBE_RE = re.compile(r"(?:youtube\.com|youtu\.be)")
-SPOTIFY_RE = re.compile(r"open\.spotify\.com|spotify:")
+YOUTUBE_REGEX = re.compile(r"(https?://)?(www\.)?(youtube\.com|youtu\.be)/")
+SPOTIFY_REGEX = re.compile(r"(https?://)?(open\.)?spotify\.com/")
 
-def is_youtube_url(text: str) -> bool:
-    if not text:
-        return False
-    return bool(YOUTUBE_RE.search(text))
+def is_youtube_url(url: str) -> bool:
+    return bool(YOUTUBE_REGEX.search(url or ""))
 
-def is_spotify_url(text: str) -> bool:
-    if not text:
-        return False
-    return bool(SPOTIFY_RE.search(text))
-
-def extract_spotify_id(url: str) -> str | None:
-    # supports open.spotify.com/track/<id> or spotify:track:<id>
-    if "open.spotify.com" in url:
-        parts = url.split("/")
-        if len(parts) >= 5:
-            return parts[4].split("?")[0]
-    if url.startswith("spotify:"):
-        return url.split(":")[-1]
-    return None
+def is_spotify_url(url: str) -> bool:
+    return bool(SPOTIFY_REGEX.search(url or ""))

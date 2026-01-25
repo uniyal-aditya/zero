@@ -1,10 +1,11 @@
 # core/player.py
 import asyncio
 import wavelink
+from typing import List, Optional
 
 class SimpleQueue:
     def __init__(self):
-        self._list = []
+        self._list: List = []
         self._lock = asyncio.Lock()
         self._queue = asyncio.Queue()
 
@@ -14,7 +15,8 @@ class SimpleQueue:
             await self._queue.put(item)
 
     async def get(self):
-        return await self._queue.get()
+        item = await self._queue.get()
+        return item
 
     def as_list(self):
         return list(self._list)
@@ -24,30 +26,48 @@ class SimpleQueue:
 
     def clear(self):
         self._list.clear()
-        # reset queue
+        # recreate the queue
         self._queue = asyncio.Queue()
 
-    def add_tracks(self, tracks):
-        for t in tracks:
-            self._list.append(t)
-            self._queue.put_nowait(t)
-
 class MusicPlayer(wavelink.Player):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    """
+    Simple player wrapper - expects wavelink Player methods: play, stop, pause, resume, volume, seek.
+    The wavelink Player instance will be used as the voice client.
+    """
+
+    def __init__(self, bot, guild_id: int):
+        super().__init__(bot=bot, guild_id=guild_id)
         self.queue = SimpleQueue()
-        self._history = []
+        self.current_track = None
+        self._history: List = []
+        self.loop_mode = "off"  # off / track / queue
+
+    async def put(self, track):
+        await self.queue.put(track)
+
+    async def play_next(self, track):
+        await self.play(track)
+        self.current_track = track
 
     async def do_next(self):
-        # Called when a track ends
-        if not self.queue.is_empty():
-            nxt = await self.queue.get()
-            # remove from list front
-            try:
-                self.queue._list.pop(0)
-            except Exception:
-                pass
-            # push current to history if exists
-            if self.current_track:
-                self._history.append(self.current_track)
-            await self.play(nxt)
+        # called when current track ends
+        try:
+            if self.loop_mode == "track" and self.current_track:
+                await self.play(self.current_track)
+                return
+            if not self.queue.is_empty():
+                nxt = await self.queue.get()
+                # pop first element from list
+                try:
+                    self.queue._list.pop(0)
+                except Exception:
+                    pass
+                # push current into history
+                if self.current_track:
+                    self._history.append(self.current_track)
+                self.current_track = nxt
+                await self.play(nxt)
+        except Exception:
+            # don't crash: log to stdout
+            import traceback
+            traceback.print_exc()
