@@ -11,56 +11,32 @@ from dotenv import load_dotenv
 import config
 from core.db import Database
 
-# ======================
-# LOAD ENV & LOGGING
-# ======================
 load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("zero")
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 APP_ID_RAW = os.getenv("APPLICATION_ID")
-
 try:
     APPLICATION_ID = int(APP_ID_RAW) if APP_ID_RAW else None
 except Exception:
     APPLICATION_ID = None
 
-# ======================
-# INTENTS
-# ======================
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 
-# ======================
-# BOT INSTANCE
-# ======================
-bot = commands.Bot(
-    command_prefix=config.PREFIX,  # "."
-    intents=intents,
-    application_id=APPLICATION_ID,
-    help_command=None
-)
-
-# Attach database
+bot = commands.Bot(command_prefix=config.PREFIX, intents=intents, application_id=APPLICATION_ID, help_command=None)
 bot.db = Database()
 
-# ======================
-# EXTENSIONS
-# ======================
 EXTENSIONS: List[str] = [
-    "cogs.music_yt",   # yt-dlp music system
+    "cogs.music_yt",
     "cogs.help",
-    "cogs.liked",
-    "cogs.lyrics",
-    "cogs.playlist",
+    "cogs.liked",    # if present
+    "cogs.lyrics",   # if present
+    "cogs.playlist", # if present
     "cogs.premium",
-    "cogs.mode247",
 ]
 
 async def load_extensions():
@@ -69,39 +45,34 @@ async def load_extensions():
             await bot.load_extension(ext)
             log.info("Loaded extension: %s", ext)
         except Exception as e:
-            log.exception("Failed to load %s", ext)
+            log.exception("Failed to load %s: %s", ext, e)
 
-# ======================
-# EVENTS
-# ======================
 @bot.event
 async def on_ready():
     log.info("%s is online as %s (ID: %s)", config.BOT_NAME, bot.user, bot.user.id)
-
-    # Init DB
     try:
         await bot.db.init()
         log.info("Database initialized.")
     except Exception:
-        log.exception("Database init failed")
-
-    # Presence
+        log.exception("DB init failed")
     try:
-        await bot.change_presence(
-            activity=discord.Activity(
-                type=discord.ActivityType.listening,
-                name=f"music | {config.PREFIX}help"
-            )
-        )
+        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=f"music | {config.PREFIX}help"))
     except Exception:
         log.exception("Failed to set presence")
 
-    # Slash command sync
+    # guild test sync: if you have a TEST_GUILD_ID env var, copy global to guild for instant registration
+    TEST_GUILD = os.getenv("TEST_GUILD_ID")
     try:
-        await bot.tree.sync()
-        log.info("Slash commands synced.")
+        if TEST_GUILD:
+            guild_obj = discord.Object(id=int(TEST_GUILD))
+            bot.tree.copy_global_to(guild=guild_obj)
+            await bot.tree.sync(guild=guild_obj)
+            log.info("Synced commands to test guild %s", TEST_GUILD)
+        else:
+            await bot.tree.sync()
+            log.info("Slash commands synced globally (may take up to an hour to appear).")
     except Exception:
-        log.exception("Slash command sync failed")
+        log.exception("Slash sync failed")
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -109,9 +80,6 @@ async def on_message(message: discord.Message):
         return
     await bot.process_commands(message)
 
-# ======================
-# MAIN
-# ======================
 async def main():
     async with bot:
         await load_extensions()
