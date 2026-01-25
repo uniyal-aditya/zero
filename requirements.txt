@@ -3,3 +3,4 @@ yt-dlp>=2024.10.7
 python-dotenv
 PyNaCl
 aiohttp
+aiosqlite
