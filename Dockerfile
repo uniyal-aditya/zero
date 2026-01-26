@@ -7,11 +7,14 @@ ENV PYTHONUNBUFFERED=1
 # install system deps + ffmpeg
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      ffmpeg \
-      build-essential \
-      libffi-dev \
-      git \
-      && rm -rf /var/lib/apt/lists/*
+    ffmpeg \
+    libopus0 \
+    libopus-dev \
+    python3-dev \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
 
 # create app dir
 WORKDIR /app

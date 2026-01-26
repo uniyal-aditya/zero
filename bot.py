@@ -5,6 +5,9 @@ import logging
 from typing import List
 
 import discord
+
+discord.opus.load_opus("libopus.so.0")
+
 from discord.ext import commands
 from dotenv import load_dotenv
 
