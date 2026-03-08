@@ -6,7 +6,15 @@ from typing import List
 
 import discord
 
-discord.opus.load_opus("libopus.so.0")
+# Safe opus loading - works cross-platform
+if not discord.opus.is_loaded():
+    try:
+        discord.opus.load_opus("libopus.so.0")
+    except Exception:
+        try:
+            discord.opus.load_opus("libopus.so")
+        except Exception:
+            pass  # On some systems (Windows), opus is bundled with PyNaCl
 
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -36,9 +44,10 @@ bot.db = Database()
 EXTENSIONS: List[str] = [
     "cogs.music_yt",
     "cogs.help",
-    "cogs.liked",    # if present
-    "cogs.lyrics",   # if present
-    "cogs.playlist", # if present
+    "cogs.liked",
+    "cogs.lyrics",
+    "cogs.playlist",
+    "cogs.mode247",
     "cogs.premium",
 ]
 
@@ -63,7 +72,6 @@ async def on_ready():
     except Exception:
         log.exception("Failed to set presence")
 
-    # guild test sync: if you have a TEST_GUILD_ID env var, copy global to guild for instant registration
     TEST_GUILD = os.getenv("TEST_GUILD_ID")
     try:
         if TEST_GUILD:
