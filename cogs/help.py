@@ -1,79 +1,111 @@
 # cogs/help.py
 import discord
 from discord.ext import commands
+import config
 
-HELP_CATEGORIES = {
-    "Music (Free)": [
-        (".p / .play <query>", "Play a song (YouTube search or link)"),
-        (".skip", "Skip current track"),
-        (".queue / .q", "Show the queue"),
-        (".nowplaying / .np", "Show current track"),
-        (".pause", "Pause playback"),
-        (".resume", "Resume playback"),
-        (".stop / .leave", "Disconnect bot from voice"),
-        (".volume <0-200>", "Set playback volume"),
+CATEGORIES = {
+    "🎵 Music": [
+        (f"`{config.PREFIX}play / {config.PREFIX}p <query>`",    "Play a song by name or YouTube URL"),
+        (f"`{config.PREFIX}search <query>`",                      "Search YouTube and pick a result"),
+        (f"`{config.PREFIX}skip / {config.PREFIX}s`",            "Skip the current track"),
+        (f"`{config.PREFIX}stop / {config.PREFIX}leave`",        "Stop music and disconnect"),
+        (f"`{config.PREFIX}pause`",                               "Pause playback"),
+        (f"`{config.PREFIX}resume / {config.PREFIX}r`",          "Resume playback"),
+        (f"`{config.PREFIX}nowplaying / {config.PREFIX}np`",     "Show current track"),
+        (f"`{config.PREFIX}queue / {config.PREFIX}q [page]`",    "View the queue"),
+        (f"`{config.PREFIX}remove <pos>`",                       "Remove a track from queue"),
+        (f"`{config.PREFIX}move <from> <to>`",                   "Move a track in the queue"),
+        (f"`{config.PREFIX}clear`",                              "Clear the entire queue"),
+        (f"`{config.PREFIX}loop [off/track/queue]`",             "Set loop mode"),
+        (f"`{config.PREFIX}volume <0-200>`",                     "Set the volume"),
     ],
-    "Music (Premium)": [
-        (".shuffle", "Shuffle the queue (Premium)"),
-        (".skipto <pos>", "Skip to queue position (Premium)"),
-        (".247 on/off", "24/7 stay in voice (Premium)"),
+    "⭐ Premium Music": [
+        (f"`{config.PREFIX}shuffle`",                            "Shuffle the queue"),
+        (f"`{config.PREFIX}skipto <pos>`",                       "Jump to a queue position"),
+        (f"`{config.PREFIX}filter <name>`",                      "Apply audio filters (bassboost, nightcore...)"),
+        (f"`{config.PREFIX}247 on/off`",                         "Stay in VC 24/7"),
+        ("`loop queue`",                                          "Queue loop mode"),
     ],
-    "Liked / Playlists": [
-        (".like", "Like the current song"),
-        (".liked", "View your liked songs"),
-        (".pl-create <name>", "Create a personal playlist"),
-        (".pl-add <playlist> <url>", "Add a track to a playlist"),
-        (".pl-play <playlist>", "Queue an entire playlist"),
-        (".pl-list", "List your playlists"),
+    "❤️ Liked Songs": [
+        (f"`{config.PREFIX}like`",                               "Like the current song"),
+        (f"`{config.PREFIX}liked`",                              "View your liked songs"),
+        (f"`{config.PREFIX}likedplay`",                          "Queue all liked songs"),
+        (f"`{config.PREFIX}unliked <pos>`",                      "Remove a liked song"),
     ],
-    "Utility": [
-        (".lyrics [query]", "Get lyrics for current or searched song"),
-        (".help", "Show this help menu"),
+    "📋 Playlists": [
+        (f"`{config.PREFIX}pl create <n>`",                      "Create a playlist"),
+        (f"`{config.PREFIX}pl add <n>`",                         "Add current song to playlist"),
+        (f"`{config.PREFIX}pl play <n>`",                        "Queue an entire playlist"),
+        (f"`{config.PREFIX}pl show <n>`",                        "View playlist tracks"),
+        (f"`{config.PREFIX}pl list`",                            "List your playlists"),
+        (f"`{config.PREFIX}pl delete <n>`",                      "Delete a playlist"),
+    ],
+    "🎤 Lyrics": [
+        (f"`{config.PREFIX}lyrics [query]`",                     "Get lyrics for current/searched song"),
+    ],
+    "🔧 Utility": [
+        (f"`{config.PREFIX}ping`",                               "Check bot latency"),
+        (f"`{config.PREFIX}uptime`",                             "How long the bot has been running"),
+        (f"`{config.PREFIX}invite`",                             "Get the invite link"),
+        (f"`{config.PREFIX}guide`",                              "How to use Zero"),
+        (f"`{config.PREFIX}premium`",                            "Premium info & status"),
+        (f"`{config.PREFIX}claim`",                              "Claim 24h premium after voting on top.gg"),
+        (f"`{config.PREFIX}votestatus`",                         "Check your vote/premium status"),
+        (f"`{config.PREFIX}botinfo`",                            "Info about Zero"),
+        (f"`{config.PREFIX}help`",                               "This help menu"),
     ],
 }
 
+class HelpSelect(discord.ui.Select):
+    def __init__(self):
+        opts = [discord.SelectOption(label=cat, description=f"{len(cmds)} commands") for cat, cmds in CATEGORIES.items()]
+        super().__init__(placeholder="📂 Choose a category...", options=opts, min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        cat = self.values[0]
+        cmds = CATEGORIES[cat]
+        embed = discord.Embed(title=f"{cat} Commands", color=0x5865F2)
+        for name, desc in cmds:
+            embed.add_field(name=name, value=desc, inline=False)
+        embed.set_footer(text=f"Zero Music Bot | Prefix: {config.PREFIX}")
+        await interaction.response.edit_message(embed=embed)
 
 class HelpView(discord.ui.View):
     def __init__(self, author_id: int):
         super().__init__(timeout=120)
         self.author_id = author_id
+        self.add_item(HelpSelect())
 
-        options = [
-            discord.SelectOption(label=k, description=f"{len(v)} commands")
-            for k, v in HELP_CATEGORIES.items()
-        ]
-        self.select = discord.ui.Select(placeholder="Choose a category", options=options, min_values=1, max_values=1)
-        self.select.callback = self._callback
-        self.add_item(self.select)
-
-    async def _callback(self, interaction: discord.Interaction):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id:
-            return await interaction.response.send_message("This help menu isn't for you.", ephemeral=True)
-        cat = self.select.values[0]
-        embed = discord.Embed(title=f"{cat} — Commands", color=discord.Color.blurple())
-        for cmd, desc in HELP_CATEGORIES[cat]:
-            embed.add_field(name=cmd, value=desc, inline=False)
-        await interaction.response.edit_message(embed=embed, view=self)
+            await interaction.response.send_message("This menu isn't for you.", ephemeral=True)
+            return False
+        return True
 
-
-class HelpCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+class Help(commands.Cog):
+    def __init__(self, bot):
         self.bot = bot
 
-    @commands.hybrid_command(name="help", description="Show help menu with categories")
+    @commands.command(name="help", aliases=["h", "commands", "cmds"])
     async def help(self, ctx: commands.Context):
+        """Show the help menu."""
         embed = discord.Embed(
-            title=f"{self.bot.user.name} — Help",
-            description="Select a category from the menu below.",
-            color=discord.Color.blurple()
+            title=f"🎵 {config.BOT_NAME} — Help",
+            description=(
+                f"**Prefix:** `{config.PREFIX}` — also supports `/` slash commands\n\n"
+                "Select a category below to see commands.\n\n"
+                "**Quick Start:**\n"
+                f"`{config.PREFIX}play <song>` — play music\n"
+                f"`{config.PREFIX}search <query>` — search & pick\n"
+                f"`{config.PREFIX}guide` — full guide\n"
+            ),
+            color=0x5865F2
         )
-        embed.set_footer(text="⭐ Premium commands require the server to have premium activated.")
+        embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+        embed.set_footer(text=f"Made with ❤️ | {len(CATEGORIES)} categories")
         view = HelpView(ctx.author.id)
-        if ctx.interaction:
-            await ctx.interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-        else:
-            await ctx.reply(embed=embed, view=view, mention_author=False)
+        await ctx.send(embed=embed, view=view)
 
 
-async def setup(bot: commands.Bot):
-    await bot.add_cog(HelpCog(bot))
+async def setup(bot):
+    await bot.add_cog(Help(bot))
