@@ -21,6 +21,7 @@ class Zero(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
+        intents.presences = True
         super().__init__(
             command_prefix=cfg.PREFIX,
             intents=intents,
@@ -83,6 +84,14 @@ class Zero(commands.Bot):
   Lavalink : {lava}
   ─────────────────────────────────
 """)
+        # Set status immediately so bot shows as online right away
+        await self.change_presence(
+            status=discord.Status.online,
+            activity=discord.Activity(
+                type=discord.ActivityType.listening,
+                name="-help | Zero Music"
+            )
+        )
         self.loop.create_task(self._rotate_status())
 
     async def _rotate_status(self):
@@ -94,7 +103,10 @@ class Zero(commands.Bot):
         ]
         i = 0
         while not self.is_closed():
-            await self.change_presence(activity=statuses[i % len(statuses)])
+            await self.change_presence(
+                status=discord.Status.online,
+                activity=statuses[i % len(statuses)]
+            )
             i += 1
             await asyncio.sleep(30)
 
