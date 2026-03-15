@@ -1,4 +1,4 @@
-# 🎵 Zero Music Bot
+# 🎵 Zero Music Bot (Python)
 
 > A feature-rich, high-definition Discord music bot — *Made by Aditya</>*
 
@@ -6,18 +6,18 @@
 
 ## ✨ Features
 
-- 🎵 **HD Audio** from YouTube & Spotify (tracks, albums, playlists)
-- ▶️ Full player controls — play, pause, resume, skip, back, forward, rewind, seek
-- 🔀 Shuffle • 🔁 Loop (track / queue) • ♾️ Autoplay
-- 📋 Queue management — view, remove, move, clear, skip-to
-- 📁 Personal playlists — create, edit, play
+- 🎵 HD Audio via **Lavalink** (YouTube & Spotify)
+- ▶️ Full player — play, pause, resume, skip, back, forward, rewind, seek
+- 🔀 Shuffle  •  🔁 Loop (track / queue)  •  ♾️ Autoplay
+- 📋 Queue — view, remove, move, clear, skip-to
+- 📁 Personal playlists (create, edit, play)
 - ❤️ Liked Songs — like/unlike, play all
-- ⭐ Premium system — server-level (owner-granted) + 12-hour vote premium (Top.gg)
-- 🎛️ Audio filters — Bass Boost, 8D, Nightcore, Vaporwave, and more (Premium)
-- 🔒 24/7 Mode — bot stays in VC (Premium)
-- 🎧 DJ Role — restrict controls to a role (Premium)
-- 📖 Interactive dropdown help menu
-- 💬 @mention → sends bot about message with footer **Made by Aditya</>**
+- ⭐ Premium — server-level (owner) + 12hr vote (Top.gg)
+- 🎛️ Audio Filters — Bass, 8D, Nightcore, Vaporwave, Tremolo, Vibrato (Premium)
+- 🔒 24/7 Mode (Premium)
+- 🎧 DJ Role (Premium)
+- 📖 Interactive dropdown help menu (`-help`)
+- 💬 @mention → about embed with **Made by Aditya</>** footer
 
 ---
 
@@ -25,110 +25,132 @@
 
 ### 1. Prerequisites
 
-- Node.js **v18.x** (v18.20.x works fine) or **v20+**
-  > ⚠️ **Node 18 users:** The bot includes an automatic `File` polyfill — the `ReferenceError: File is not defined` crash is already fixed. No action needed.
-- FFmpeg installed and in your PATH
-  - Windows: https://ffmpeg.org/download.html
-  - Linux: `sudo apt install ffmpeg`
-  - macOS: `brew install ffmpeg`
+- Python **3.10+**
+- A **Lavalink server** (handles all audio)
 
-### 2. Clone & Install
+### 2. Setting up Lavalink
 
+Lavalink is a separate audio server Zero connects to. You need it running.
+
+#### Free hosting option — use lavalink.devamop.in or similar public nodes:
+Edit your `.env`:
+```
+LAVALINK_HOST=lavalink.devamop.in
+LAVALINK_PORT=443
+LAVALINK_PASSWORD=DevamOP
+```
+> Search "free lavalink nodes 2024" for current public options.
+
+#### Self-host (recommended):
 ```bash
-git clone <your-repo>
-cd ZeroBot
-npm install
+# Requires Java 17+
+wget https://github.com/lavalink-devs/Lavalink/releases/latest/download/Lavalink.jar
+# Create application.yml (see below), then:
+java -jar Lavalink.jar
 ```
 
-### 3. Configure
+Minimal `application.yml`:
+```yaml
+server:
+  port: 2333
+  address: 0.0.0.0
+lavalink:
+  server:
+    password: "youshallnotpass"
+    sources:
+      youtube: true
+      soundcloud: true
+      http: true
+plugins:
+  - dependency: "dev.lavalink.youtube:youtube-plugin:1.3.0"
+    repository: "https://maven.lavalink.dev/releases"
+```
 
-Copy `.env.example` to `.env` and fill in your values:
+### 3. Install & Configure
 
 ```bash
+cd ZeroBotPy
+pip install -r requirements.txt
+
+# Copy and fill in env
 cp .env.example .env
+# Edit .env with your values
 ```
 
 | Variable               | Where to get it |
 |------------------------|-----------------|
 | `DISCORD_TOKEN`        | [Discord Developer Portal](https://discord.com/developers/applications) → Bot → Token |
+| `LAVALINK_HOST`        | Your Lavalink server address |
+| `LAVALINK_PORT`        | Lavalink port (default 2333) |
+| `LAVALINK_PASSWORD`    | Lavalink password |
 | `SPOTIFY_CLIENT_ID`    | [Spotify Dashboard](https://developer.spotify.com/dashboard) |
 | `SPOTIFY_CLIENT_SECRET`| Same as above |
-| `TOPGG_TOKEN`          | [Top.gg API](https://top.gg/api/docs) |
-| `TOPGG_BOT_ID`         | Your bot's ID on Top.gg |
-
-Also set `CLIENT_ID` in `.env` for slash command deployment:
-```
-CLIENT_ID=your_bot_application_id
-```
+| `TOPGG_TOKEN`          | [Top.gg API](https://top.gg/api/docs) — for vote checking |
+| `TOPGG_BOT_ID`         | Your bot's numeric ID on Top.gg |
 
 ### 4. Discord Bot Settings
 
 In the Developer Portal:
-- **Privileged Gateway Intents:** Enable `Message Content Intent`, `Server Members Intent`
-- **OAuth2 Scopes:** `bot`, `applications.commands`
-- **Bot Permissions:** `Connect`, `Speak`, `Send Messages`, `Embed Links`, `Read Message History`, `Use External Emojis`, `Add Reactions`
+- **Privileged Intents:** Enable `Message Content` and `Server Members`
+- **OAuth2 Scopes:** `bot` + `applications.commands`
+- **Bot Permissions:** `Connect`, `Speak`, `Send Messages`, `Embed Links`, `Use External Emojis`, `Read Message History`, `Add Reactions`
 
-### 5. Deploy Slash Commands
-
-```bash
-npm run deploy
-```
-
-### 6. Start the Bot
+### 5. Run
 
 ```bash
-npm start
-# or for development with auto-restart:
-npm run dev
+python bot.py
 ```
+
+Slash commands are synced automatically on startup.
 
 ---
 
 ## 📋 Commands
 
-### 🎵 Music  (prefix `-` or `/`)
+### 🎵 Music
 
 | Command | Aliases | Description |
 |---------|---------|-------------|
 | `-play <query/URL>` | `-p` | Play from YouTube or Spotify |
-| `-pause` | | Pause playback |
-| `-resume` | | Resume playback |
-| `-skip` | `-s` | Skip current track |
+| `-pause` | | Pause |
+| `-resume` | | Resume |
+| `-skip` | `-s` | Skip track |
 | `-back` | `-b`, `-prev` | Previous track |
-| `-stop` | | Stop & clear queue |
-| `-nowplaying` | `-np` | Current track info |
-| `-forward [s]` | `-ff` | Fast-forward N seconds |
-| `-rewind [s]` | `-rw` | Rewind N seconds |
-| `-seek <mm:ss>` | | Seek to timestamp |
+| `-stop` | | Stop & clear |
+| `-nowplaying` | `-np` | Now playing |
+| `-forward [s]` | `-ff` | Fast-forward |
+| `-rewind [s]` | `-rw` | Rewind |
+| `-seek <mm:ss>` | | Seek to time |
 | `-volume <1-200>` | `-v` | Set volume |
 | `-lyrics [song]` | | Get lyrics |
-| `-leave` | `-dc` | Disconnect bot |
+| `-leave` | `-dc` | Disconnect |
+| `-help [cat]` | `-h` | Help menu |
 
 ### 📋 Queue
 
 | Command | Description |
 |---------|-------------|
 | `-queue [page]` / `-q` | View queue |
-| `-shuffle` | Shuffle queue |
+| `-shuffle` | Shuffle |
 | `-loop` | Cycle loop modes |
-| `-autoplay` | Toggle autoplay |
+| `-autoplay` / `-ap` | Toggle autoplay |
 | `-skipto <pos>` | Jump to position |
-| `-remove <pos>` | Remove a track |
-| `-move <from> <to>` | Reorder track |
+| `-remove <pos>` | Remove track |
+| `-move <from> <to>` | Reorder |
 | `-clear` | Clear queue |
 
 ### 📁 Playlists
 
 | Command | Description |
 |---------|-------------|
-| `-pl create <name>` | Create a playlist |
-| `-pl delete <name>` | Delete a playlist |
+| `-pl create <n>` | Create playlist |
+| `-pl delete <n>` | Delete playlist |
 | `-pl list` | All your playlists |
-| `-pl view <name>` | View songs in playlist |
-| `-pl add <name>` | Add current song |
-| `-pl remove <name> <pos>` | Remove song from playlist |
-| `-pl play <name>` | Queue entire playlist |
-| `-pl rename <old> <new>` | Rename a playlist |
+| `-pl view <n>` | View songs |
+| `-pl add <n>` | Add current song |
+| `-pl remove <n> <pos>` | Remove song |
+| `-pl play <n>` | Queue playlist |
+| `-pl rename <old> <new>` | Rename |
 
 ### ❤️ Liked Songs
 
@@ -144,80 +166,69 @@ npm run dev
 | Command | Description |
 |---------|-------------|
 | `-vote` | Vote on Top.gg for 12hr Premium |
-| `-premium` | Check your premium status |
-| `-filter <name>` | Apply audio filter |
+| `-premium` | Check status |
+| `-filter <n>` | Apply audio filter |
 | `-247` | Toggle 24/7 mode |
 | `-djrole [@role]` | Set/clear DJ role |
 
-**Available filters:** `bass` `8d` `nightcore` `vaporwave` `tremolo` `vibrato` `normalizer` `fadein` `reverse` `reset`
+**Filters:** `bass` `8d` `nightcore` `vaporwave` `tremolo` `vibrato` `normalizer` `reset`
 
 ### 👑 Owner (Aditya only)
 
 | Command | Description |
 |---------|-------------|
-| `-premium grant <guildId>` | Grant server premium |
-| `-premium revoke <guildId>` | Revoke server premium |
+| `-premium grant <id>` | Grant server premium |
+| `-premium revoke <id>` | Revoke server premium |
 | `-premium list` | All premium servers |
-| `-premium status <guildId>` | Server premium info |
+| `-premium status <id>` | Server info |
 | `-setstatus <text>` | Change bot status |
-| `-eval <code>` | Run JavaScript |
+| `-eval <code>` | Run Python |
 | `-announce <msg>` | DM all guild owners |
-
----
-
-## ⭐ Premium System
-
-### Server Premium (Permanent)
-Granted by the bot owner (Aditya) via `-premium grant <guildId>`.
-Unlocks all premium features for the **entire server**.
-
-### Vote Premium (12 Hours)
-Any **user** can vote for Zero on [Top.gg](https://top.gg) and run `-vote` to claim 12 hours of personal premium access.
+| `-servers` | List all servers |
 
 ---
 
 ## 📁 Project Structure
 
 ```
-ZeroBot/
-├── data/                    # JSON persistence (auto-created)
+ZeroBotPy/
+├── data/               # JSON persistence (auto-created)
 │   ├── premium.json
 │   ├── votes.json
 │   ├── playlists.json
-│   ├── likedSongs.json
+│   ├── liked_songs.json
 │   └── settings.json
-├── src/
-│   ├── commands/
-│   │   ├── music/           # play, controls, queue, lyrics, help
-│   │   ├── playlist/        # playlist, liked songs
-│   │   ├── premium/         # filters, 24/7, djrole, vote, premium
-│   │   └── owner/           # eval, setstatus, announce
-│   ├── events/              # ready, messageCreate, interactionCreate, voiceStateUpdate
-│   ├── utils/
-│   │   ├── database.js      # JSON file-based data store
-│   │   ├── embeds.js        # All embed builders + help menu
-│   │   ├── permissions.js   # Owner/premium/DJ checks
-│   │   ├── topgg.js         # Top.gg vote checking
-│   │   └── ctx.js           # Unified prefix+slash context
-│   ├── config.js
-│   ├── deploy-commands.js
-│   └── index.js
+├── cogs/
+│   ├── music.py        # play, pause, skip, back, forward, seek, lyrics, help
+│   ├── queue.py        # queue, shuffle, loop, autoplay, skipto, remove, move, clear
+│   ├── playlist.py     # pl create/delete/list/view/add/remove/play/rename
+│   ├── liked.py        # like, unlike, liked
+│   ├── premium.py      # filter, 247, djrole, vote, premium
+│   └── owner.py        # eval, setstatus, announce, servers
+├── utils/
+│   ├── database.py     # JSON file-based data store
+│   ├── embeds.py       # All embed builders + help dropdown UI
+│   ├── checks.py       # Permission decorators
+│   └── topgg.py        # Top.gg vote API
+├── bot.py              # Bot entry point
+├── config.py           # All configuration
+├── requirements.txt
 ├── .env.example
-├── package.json
 └── README.md
 ```
 
 ---
 
-## 🛠️ Troubleshooting
+## ⭐ Premium System
 
-**Bot joins but no audio** → Make sure FFmpeg is installed and in PATH.
+### Server Premium (Permanent)
+Granted **only by Aditya** (owner ID `800553680704110624`) via:
+```
+-premium grant <guild_id>
+```
 
-**Spotify links not working** → Double-check `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in `.env`.
-
-**Vote premium not granting** → Ensure `TOPGG_TOKEN` and `TOPGG_BOT_ID` are correct.
-
-**Slash commands not showing** → Run `npm run deploy` and wait up to 1 hour for Discord to propagate.
+### Vote Premium (12 Hours)
+Any user votes on [Top.gg](https://top.gg) then runs `-vote` to claim 12hr personal premium.
 
 ---
 
