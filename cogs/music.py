@@ -337,7 +337,7 @@ class Music(commands.Cog):
         if category:
             embed = help_category(category.lower())
             if not embed:
-                return await ctx.reply(embed=err("Unknown category. Try: `music` `queue` `playlist` `liked` `premium` `owner`"), mention_author=False)
+                return await ctx.reply(embed=err("Unknown category. Try: `general` `music` `queue` `playlist` `liked` `premium` `owner`"), mention_author=False)
             await ctx.reply(embed=embed, view=BackView(), mention_author=False)
         else:
             embed, view = help_main(self.bot)
@@ -346,6 +346,7 @@ class Music(commands.Cog):
     @app_commands.command(name="help", description="📖 Show the interactive help menu")
     @app_commands.describe(category="Optional category to jump to")
     @app_commands.choices(category=[
+        app_commands.Choice(name="🌐 General",     value="general"),
         app_commands.Choice(name="🎵 Music",       value="music"),
         app_commands.Choice(name="📋 Queue",        value="queue"),
         app_commands.Choice(name="📁 Playlists",    value="playlist"),

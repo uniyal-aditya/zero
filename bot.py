@@ -13,6 +13,7 @@ COGS = [
     "cogs.liked",
     "cogs.premium",
     "cogs.owner",
+    "cogs.general",
 ]
 
 

@@ -176,13 +176,14 @@ def help_main(bot: discord.Client) -> tuple[discord.Embed, discord.ui.View]:
         title="🎵  Zero Music — Help",
         description=(
             "**Select a category below** to view its commands.\n\n"
+            "> 🌐 **General** — ping, stats, serverinfo, userinfo, invite\n"
             "> 🎵 **Music** — Playback, seek, volume, lyrics\n"
             "> 📋 **Queue** — View, manage, shuffle, loop\n"
             "> 📁 **Playlists** — Create & manage personal playlists\n"
             "> ❤️ **Liked Songs** — Your personal favorites\n"
             "> ⭐ **Premium** — Filters, 24/7, DJ role & more\n"
             "> 👑 **Owner** — Bot management (restricted)\n\n"
-            f"**Prefix:** `-`  •  **Slash:** `/`"
+            f"**Prefix:** `-`  •  **Slash:** `/`  •  **Support:** {cfg.SUPPORT_URL}"
         ),
         colour=cfg.COL_PRIMARY,
     )
@@ -193,6 +194,22 @@ def help_main(bot: discord.Client) -> tuple[discord.Embed, discord.ui.View]:
 
 
 HELP_PAGES = {
+    "general": {
+        "title": "🌐  General Commands",
+        "colour": cfg.COL_PRIMARY,
+        "fields": [
+            ("🏓 Ping",        "`-ping` — Bot latency & uptime"),
+            ("📊 Stats",       "`-stats` `-botstats` — Full bot statistics"),
+            ("🎵 Bot Info",    "`-botinfo` `-bot` `-info`"),
+            ("🏠 Server Info", "`-serverinfo` `-si`"),
+            ("👤 User Info",   "`-userinfo [@user]` `-ui` `-whois`"),
+            ("🖼️ Avatar",      "`-avatar [@user]` `-av` `-pfp`"),
+            ("🖼️ Banner",      "`-banner [@user]`"),
+            ("🎭 Role Info",   "`-roleinfo <@role>` `-ri`"),
+            ("➕ Invite",      "`-invite` `-inv` — Get bot invite link"),
+            ("💬 Support",     "`-support` — Join the support server"),
+        ],
+    },
     "music": {
         "title": "🎵  Music Commands",
         "colour": cfg.COL_PRIMARY,
@@ -293,7 +310,8 @@ def help_category(cat: str) -> discord.Embed | None:
 class HelpSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="🎵 Music",       value="music",    description="Play, pause, skip, seek, volume, lyrics"),
+            discord.SelectOption(label="🌐 General",      value="general",  description="ping, stats, serverinfo, userinfo, invite"),
+            discord.SelectOption(label="🎵 Music",        value="music",    description="Play, pause, skip, seek, volume, lyrics"),
             discord.SelectOption(label="📋 Queue",        value="queue",    description="View queue, shuffle, loop, remove, move"),
             discord.SelectOption(label="📁 Playlists",    value="playlist", description="Create, delete, play personal playlists"),
             discord.SelectOption(label="❤️ Liked Songs",  value="liked",    description="Like songs, view & play liked songs"),

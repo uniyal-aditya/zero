@@ -8,7 +8,9 @@ TOKEN        = os.getenv("DISCORD_TOKEN")
 OWNER_ID     = int(os.getenv("OWNER_ID", "800553680704110624"))
 PREFIX       = "-"
 BOT_VERSION  = "1.0.0"
-SUPPORT_URL  = "https://discord.gg/yourinvite"   # replace
+CLIENT_ID    = "1462040223872581797"
+SUPPORT_URL  = "https://discord.gg/mb7nsqUx6U"
+INVITE_URL   = "https://discord.com/oauth2/authorize?client_id=1462040223872581797&permissions=8845475720850496&response_type=code&redirect_uri=https%3A%2F%2Fdiscord.gg%2FUAd3waUyD3&integration_type=0&scope=voice+applications.commands+bot"
 
 # ── LAVALINK ──────────────────────────────────────────────────────────────────
 LAVALINK_HOST     = os.getenv("LAVALINK_HOST", "localhost")
