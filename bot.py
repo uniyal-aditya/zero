@@ -25,33 +25,58 @@ class Zero(commands.Bot):
         super().__init__(
             command_prefix=cfg.PREFIX,
             intents=intents,
-            help_command=None,   # we have our own
+            help_command=None,
             case_insensitive=True,
         )
+        self.lavalink_connected = False
 
     async def setup_hook(self):
-        # Load all cogs
+        # ── Load cogs ─────────────────────────────────────────────────────────
         for cog in COGS:
             try:
                 await self.load_extension(cog)
-                print(f"  [✓] Loaded {cog}")
+                print(f"  [+] Loaded {cog}")
             except Exception as e:
-                print(f"  [✗] Failed {cog}: {e}")
+                print(f"  [!] Failed to load {cog}: {e}")
 
-        # Connect to Lavalink
-        nodes = [
-            wavelink.Node(
-                uri=f"http://{cfg.LAVALINK_HOST}:{cfg.LAVALINK_PORT}",
-                password=cfg.LAVALINK_PASSWORD,
-            )
-        ]
-        await wavelink.Pool.connect(nodes=nodes, client=self, cache_capacity=100)
+        # ── Connect to Lavalink (non-fatal if it fails) ───────────────────────
+        await self._connect_lavalink()
 
-        # Sync slash commands
-        await self.tree.sync()
-        print("  [✓] Slash commands synced")
+        # ── Sync slash commands ───────────────────────────────────────────────
+        try:
+            await self.tree.sync()
+            print("  [+] Slash commands synced globally")
+        except Exception as e:
+            print(f"  [!] Slash sync failed: {e}")
+
+    async def _connect_lavalink(self):
+        port = cfg.LAVALINK_PORT
+        scheme = "https" if port == 443 else "http"
+        uri = f"{scheme}://{cfg.LAVALINK_HOST}:{port}"
+        print(f"  [~] Connecting to Lavalink at {uri} ...")
+        try:
+            node = wavelink.Node(uri=uri, password=cfg.LAVALINK_PASSWORD)
+            await wavelink.Pool.connect(nodes=[node], client=self, cache_capacity=100)
+            self.lavalink_connected = True
+            print(f"  [+] Lavalink connected!")
+        except Exception as e:
+            self.lavalink_connected = False
+            print(f"""
+  [!] Lavalink connection FAILED: {e}
+  ─────────────────────────────────────────────────────
+  Music commands will NOT work until Lavalink is set up.
+
+  QUICK FIX - add these 3 lines to your .env file:
+    LAVALINK_HOST=lavalink.devamop.in
+    LAVALINK_PORT=443
+    LAVALINK_PASSWORD=DevamOP
+
+  Then restart the bot.
+  ─────────────────────────────────────────────────────
+""")
 
     async def on_ready(self):
+        lava = "Connected" if self.lavalink_connected else "NOT connected (music wont work - check .env)"
         print(f"""
   ██████╗ ███████╗██████╗  ██████╗
   ╚════██╗██╔════╝██╔══██╗██╔═══██╗
@@ -59,21 +84,32 @@ class Zero(commands.Bot):
    ╚═══██╗██╔══╝  ██╔══██╗██║   ██║
   ██████╔╝███████╗██║  ██║╚██████╔╝
   ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝
-  Zero Music Bot — Made by Aditya</>
-  ────────────────────────────────────
-  User   : {self.user}
-  Guilds : {len(self.guilds)}
-  Ping   : {round(self.latency * 1000)}ms
-  ────────────────────────────────────
-        """)
-        await self.change_presence(
-            activity=discord.Activity(type=discord.ActivityType.listening, name="-help | Zero Music")
-        )
+  Zero Music Bot - Made by Aditya</>
+  ─────────────────────────────────────
+  User      : {self.user}
+  Guilds    : {len(self.guilds)}
+  Ping      : {round(self.latency * 1000)}ms
+  Lavalink  : {lava}
+  ─────────────────────────────────────
+""")
+        self.loop.create_task(self._rotate_status())
+
+    async def _rotate_status(self):
+        statuses = [
+            discord.Activity(type=discord.ActivityType.listening, name="-help | Zero Music"),
+            discord.Activity(type=discord.ActivityType.watching,  name=f"{len(self.guilds)} servers"),
+            discord.Activity(type=discord.ActivityType.playing,   name="top.gg | vote for premium"),
+            discord.Activity(type=discord.ActivityType.listening, name="HD Music"),
+        ]
+        i = 0
+        while not self.is_closed():
+            await self.change_presence(activity=statuses[i % len(statuses)])
+            i += 1
+            await asyncio.sleep(30)
 
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
-        # @mention with no other content → send about embed
         if (
             self.user
             and self.user.mentioned_in(message)
@@ -96,37 +132,58 @@ class Zero(commands.Bot):
                 await ctx.reply(embed=premium_wall(), mention_author=False)
             else:
                 await ctx.reply(embed=err(str(error)), mention_author=False)
+        elif isinstance(error, commands.CommandInvokeError):
+            orig = error.original
+            if "no node" in str(orig).lower() or "wavelink" in type(orig).__module__:
+                await ctx.reply(
+                    embed=err(
+                        "Music is unavailable — Lavalink is not connected.\n\n"
+                        "Add these to your `.env` and restart:\n"
+                        "```\nLAVALINK_HOST=lavalink.devamop.in\n"
+                        "LAVALINK_PORT=443\n"
+                        "LAVALINK_PASSWORD=DevamOP\n```"
+                    ),
+                    mention_author=False,
+                )
+            else:
+                print(f"[CommandInvokeError] {ctx.command}: {orig}")
         else:
-            print(f"[Unhandled Error] {ctx.command}: {error}")
+            print(f"[Error] {ctx.command}: {error}")
 
     async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload):
-        print(f"  [✓] Lavalink node ready: {payload.node.uri}")
+        self.lavalink_connected = True
+        print(f"  [+] Lavalink node ready: {payload.node.uri}")
 
     async def on_wavelink_track_start(self, payload: wavelink.TrackStartEventPayload):
         player = payload.player
         if not player or not hasattr(player, "home"):
             return
         from utils.embeds import now_playing
-        await player.home.send(embed=now_playing(player))
+        try:
+            await player.home.send(embed=now_playing(player))
+        except Exception:
+            pass
 
     async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload):
         player = payload.player
         if not player:
             return
-        # Autoplay
         if getattr(player, "autoplay_on", False) and player.queue.is_empty:
             if payload.track:
                 try:
-                    recs = await wavelink.Pool.fetch_tracks(f"ytsearch:{payload.track.title} {payload.track.author}")
-                    if recs:
-                        await player.queue.put_wait(recs[1] if len(recs) > 1 else recs[0])
+                    results = await wavelink.Playable.search(
+                        f"ytsearch:{payload.track.title} {payload.track.author}"
+                    )
+                    if results:
+                        await player.queue.put_wait(results[1] if len(results) > 1 else results[0])
                 except Exception:
                     pass
 
     async def on_wavelink_inactive_player(self, player: wavelink.Player):
-        settings = __import__("utils.database", fromlist=["get_settings"]).get_settings(player.guild.id)
+        import utils.database as db
+        settings = db.get_settings(player.guild.id)
         if settings.get("tf_seven"):
-            return  # 24/7 mode, stay connected
+            return
         await player.disconnect()
 
 
