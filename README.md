@@ -25,7 +25,8 @@
 
 ### 1. Prerequisites
 
-- Node.js **v18+**
+- Node.js **v18.x** (v18.20.x works fine) or **v20+**
+  > ⚠️ **Node 18 users:** The bot includes an automatic `File` polyfill — the `ReferenceError: File is not defined` crash is already fixed. No action needed.
 - FFmpeg installed and in your PATH
   - Windows: https://ffmpeg.org/download.html
   - Linux: `sudo apt install ffmpeg`

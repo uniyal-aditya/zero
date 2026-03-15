@@ -1,3 +1,17 @@
+// ── Node 18 polyfills (undici / discord.js need File & Blob globals) ──────────
+const { Blob } = require('buffer');
+if (typeof globalThis.Blob === 'undefined') globalThis.Blob = Blob;
+if (typeof globalThis.File === 'undefined') {
+  class File extends Blob {
+    constructor(chunks, name, opts = {}) {
+      super(chunks, opts);
+      this.name = name;
+      this.lastModified = opts.lastModified ?? Date.now();
+    }
+  }
+  globalThis.File = File;
+}
+
 require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const { Player }             = require('discord-player');
