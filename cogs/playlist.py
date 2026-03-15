@@ -3,12 +3,12 @@ from discord.ext import commands
 from discord import app_commands
 import wavelink
 import utils.database as db
-from utils.embeds import err, ok
+from utils.embeds import err, ok, _ms_to_str
 import config as cfg
 
 
-def get_player(ctx) -> wavelink.Player | None:
-    return ctx.guild.voice_client
+def player(ctx) -> wavelink.Player | None:
+    return ctx.guild.voice_client if ctx.guild else None
 
 
 class Playlist(commands.Cog):
@@ -17,43 +17,29 @@ class Playlist(commands.Cog):
 
     @commands.group(name="pl", aliases=["playlist"], invoke_without_command=True)
     async def pl(self, ctx: commands.Context):
-        """Playlist management. Use `-pl help` or subcommands."""
-        await ctx.reply(embed=err(
-            "Usage: `-pl <create|delete|list|view|add|remove|play|rename>`\n"
-            "Try `-help playlist` for details."
-        ), mention_author=False)
-
-    # ── CREATE ────────────────────────────────────────────────────────────────
+        await ctx.send(embed=err("Usage: `-pl <create|delete|list|view|add|remove|play|rename>`"))
 
     @pl.command(name="create")
-    async def pl_create(self, ctx: commands.Context, *, name: str = None):
-        if not name:
-            return await ctx.reply(embed=err("Provide a playlist name."), mention_author=False)
+    async def pl_create(self, ctx: commands.Context, *, name: str):
         if len(name) > 32:
-            return await ctx.reply(embed=err("Name must be ≤ 32 characters."), mention_author=False)
+            return await ctx.send(embed=err("Name must be ≤ 32 characters."))
         if len(db.get_playlists(ctx.author.id)) >= 25:
-            return await ctx.reply(embed=err("You can have at most **25** playlists."), mention_author=False)
+            return await ctx.send(embed=err("You can have at most **25** playlists."))
         if not db.create_playlist(ctx.author.id, name):
-            return await ctx.reply(embed=err(f"A playlist named **{name}** already exists."), mention_author=False)
-        await ctx.reply(embed=ok(f"📁 Created playlist **{name}**."), mention_author=False)
-
-    # ── DELETE ────────────────────────────────────────────────────────────────
+            return await ctx.send(embed=err(f"A playlist named **{name}** already exists."))
+        await ctx.send(embed=ok(f"📁 Created playlist **{name}**."))
 
     @pl.command(name="delete", aliases=["del"])
-    async def pl_delete(self, ctx: commands.Context, *, name: str = None):
-        if not name:
-            return await ctx.reply(embed=err("Provide the playlist name."), mention_author=False)
+    async def pl_delete(self, ctx: commands.Context, *, name: str):
         if not db.delete_playlist(ctx.author.id, name):
-            return await ctx.reply(embed=err(f"No playlist named **{name}** found."), mention_author=False)
-        await ctx.reply(embed=ok(f"🗑 Deleted **{name}**."), mention_author=False)
-
-    # ── LIST ──────────────────────────────────────────────────────────────────
+            return await ctx.send(embed=err(f"No playlist named **{name}** found."))
+        await ctx.send(embed=ok(f"🗑 Deleted **{name}**."))
 
     @pl.command(name="list")
     async def pl_list(self, ctx: commands.Context):
         playlists = db.get_playlists(ctx.author.id)
         if not playlists:
-            return await ctx.reply(embed=err("You have no playlists. Create one with `-pl create <n>`."), mention_author=False)
+            return await ctx.send(embed=err("You have no playlists. Create one with `-pl create <name>`."))
         entries = list(playlists.values())
         e = discord.Embed(
             title=f"📁  {ctx.author.display_name}'s Playlists",
@@ -61,97 +47,73 @@ class Playlist(commands.Cog):
             colour=cfg.COL_PRIMARY,
         )
         e.set_footer(text=f"{len(entries)}/25 playlists • Made by Aditya</>")
-        await ctx.reply(embed=e, mention_author=False)
-
-    # ── VIEW ──────────────────────────────────────────────────────────────────
+        await ctx.send(embed=e)
 
     @pl.command(name="view", aliases=["show"])
-    async def pl_view(self, ctx: commands.Context, *, name: str = None):
-        if not name:
-            return await ctx.reply(embed=err("Provide the playlist name."), mention_author=False)
+    async def pl_view(self, ctx: commands.Context, *, name: str):
         pl = db.get_playlist(ctx.author.id, name)
         if not pl:
-            return await ctx.reply(embed=err(f"No playlist named **{name}** found."), mention_author=False)
+            return await ctx.send(embed=err(f"No playlist named **{name}** found."))
         songs = pl["songs"][:20]
         desc = "\n".join(f"`{i+1}.` [{s['title']}]({s['url']}) — `{s['duration']}`" for i, s in enumerate(songs)) \
-               or "No songs yet. Use `-pl add <n>` while a song plays."
+               or "No songs yet. Use `-pl add <name>` while a song plays."
         e = discord.Embed(title=f"📁  {pl['name']}", description=desc, colour=cfg.COL_PRIMARY)
-        e.set_footer(text=f"{len(pl['songs'])} songs{' (showing first 20)' if len(pl['songs']) > 20 else ''} • Made by Aditya</>")
-        await ctx.reply(embed=e, mention_author=False)
-
-    # ── ADD ───────────────────────────────────────────────────────────────────
+        e.set_footer(text=f"{len(pl['songs'])} songs{' (showing first 20)' if len(pl['songs'])>20 else ''} • Made by Aditya</>")
+        await ctx.send(embed=e)
 
     @pl.command(name="add", aliases=["save"])
-    async def pl_add(self, ctx: commands.Context, *, name: str = None):
-        if not name:
-            return await ctx.reply(embed=err("Provide the playlist name."), mention_author=False)
-        player = get_player(ctx)
-        if not player or not player.current:
-            return await ctx.reply(embed=err("Nothing is playing right now."), mention_author=False)
-        t = player.current
-        from utils.embeds import _ms_to_str
+    async def pl_add(self, ctx: commands.Context, *, name: str):
+        vc = player(ctx)
+        if not vc or not vc.current:
+            return await ctx.send(embed=err("Nothing is playing right now."))
+        t = vc.current
         song = {"title": t.title, "url": t.uri, "duration": _ms_to_str(t.length), "author": t.author}
         if not db.add_song_to_playlist(ctx.author.id, name, song):
-            return await ctx.reply(embed=err(f"No playlist named **{name}** found."), mention_author=False)
-        await ctx.reply(embed=ok(f"✅ Added **{t.title}** to **{name}**."), mention_author=False)
-
-    # ── REMOVE ────────────────────────────────────────────────────────────────
+            return await ctx.send(embed=err(f"No playlist named **{name}** found."))
+        await ctx.send(embed=ok(f"✅ Added **{t.title}** to **{name}**."))
 
     @pl.command(name="remove", aliases=["rm"])
-    async def pl_remove(self, ctx: commands.Context, name: str = None, position: int = None):
-        if not name or position is None:
-            return await ctx.reply(embed=err("Usage: `-pl remove <playlist> <position>`"), mention_author=False)
+    async def pl_remove(self, ctx: commands.Context, name: str, position: int):
         if not db.remove_song_from_playlist(ctx.author.id, name, position - 1):
-            return await ctx.reply(embed=err("Invalid playlist name or position."), mention_author=False)
-        await ctx.reply(embed=ok(f"🗑 Removed song #{position} from **{name}**."), mention_author=False)
-
-    # ── PLAY ──────────────────────────────────────────────────────────────────
+            return await ctx.send(embed=err("Invalid playlist name or position."))
+        await ctx.send(embed=ok(f"🗑 Removed song #{position} from **{name}**."))
 
     @pl.command(name="play", aliases=["start"])
-    async def pl_play(self, ctx: commands.Context, *, name: str = None):
-        if not name:
-            return await ctx.reply(embed=err("Provide the playlist name."), mention_author=False)
+    async def pl_play(self, ctx: commands.Context, *, name: str):
         if not ctx.author.voice or not ctx.author.voice.channel:
-            return await ctx.reply(embed=err("You must be in a voice channel!"), mention_author=False)
+            return await ctx.send(embed=err("You must be in a voice channel!"))
         pl = db.get_playlist(ctx.author.id, name)
         if not pl:
-            return await ctx.reply(embed=err(f"No playlist named **{name}** found."), mention_author=False)
+            return await ctx.send(embed=err(f"No playlist named **{name}** found."))
         if not pl["songs"]:
-            return await ctx.reply(embed=err(f"**{name}** is empty."), mention_author=False)
-
-        player: wavelink.Player = ctx.guild.voice_client
-        if not player:
-            player = await ctx.author.voice.channel.connect(cls=wavelink.Player, self_deaf=True)
-            player.home = ctx.channel
-            player.autoplay_on = False
-
-        await ctx.reply(embed=ok(f"▶️ Loading **{pl['name']}** ({len(pl['songs'])} songs)…"), mention_author=False)
+            return await ctx.send(embed=err(f"**{name}** is empty."))
+        vc: wavelink.Player = ctx.guild.voice_client
+        if not vc:
+            vc = await ctx.author.voice.channel.connect(cls=wavelink.Player, self_deaf=True)
+            vc.home = ctx.channel
+            vc.autoplay_on = False
+        await ctx.send(embed=ok(f"▶️ Loading **{pl['name']}** ({len(pl['songs'])} songs)…"))
         loaded = 0
         for song in pl["songs"]:
             try:
                 results = await wavelink.Playable.search(song["url"])
                 if results:
-                    t = results[0]
-                    await player.queue.put_wait(t)
+                    await vc.queue.put_wait(results[0])
                     loaded += 1
             except Exception:
                 pass
-        if not player.playing and not player.queue.is_empty:
-            await player.play(player.queue.get())
+        if not vc.playing and not vc.queue.is_empty:
+            await vc.play(vc.queue.get())
         await ctx.channel.send(embed=ok(f"✅ Loaded **{loaded}/{len(pl['songs'])}** songs from **{pl['name']}**."))
 
-    # ── RENAME ────────────────────────────────────────────────────────────────
-
     @pl.command(name="rename")
-    async def pl_rename(self, ctx: commands.Context, old: str = None, *, new: str = None):
-        if not old or not new:
-            return await ctx.reply(embed=err("Usage: `-pl rename <old> <new>`"), mention_author=False)
+    async def pl_rename(self, ctx: commands.Context, old: str, *, new: str):
         result = db.rename_playlist(ctx.author.id, old, new)
         if result is False:
-            return await ctx.reply(embed=err(f"No playlist named **{old}** found."), mention_author=False)
+            return await ctx.send(embed=err(f"No playlist named **{old}** found."))
         if result == "exists":
-            return await ctx.reply(embed=err(f"**{new}** already exists."), mention_author=False)
-        await ctx.reply(embed=ok(f"✏️ Renamed **{old}** → **{new}**."), mention_author=False)
+            return await ctx.send(embed=err(f"**{new}** already exists."))
+        await ctx.send(embed=ok(f"✏️ Renamed **{old}** → **{new}**."))
 
 
 async def setup(bot):

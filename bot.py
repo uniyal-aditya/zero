@@ -1,5 +1,4 @@
 import asyncio
-import os
 import discord
 from discord.ext import commands
 import wavelink
@@ -31,52 +30,44 @@ class Zero(commands.Bot):
         self.lavalink_connected = False
 
     async def setup_hook(self):
-        # ── Load cogs ─────────────────────────────────────────────────────────
         for cog in COGS:
             try:
                 await self.load_extension(cog)
                 print(f"  [+] Loaded {cog}")
             except Exception as e:
-                print(f"  [!] Failed to load {cog}: {e}")
+                print(f"  [!] Failed {cog}: {e}")
 
-        # ── Connect to Lavalink (non-fatal if it fails) ───────────────────────
         await self._connect_lavalink()
 
-        # ── Sync slash commands ───────────────────────────────────────────────
+        # Sync slash commands globally
         try:
-            await self.tree.sync()
-            print("  [+] Slash commands synced globally")
+            synced = await self.tree.sync()
+            print(f"  [+] Synced {len(synced)} slash commands globally")
         except Exception as e:
             print(f"  [!] Slash sync failed: {e}")
 
     async def _connect_lavalink(self):
-        port = cfg.LAVALINK_PORT
+        port   = cfg.LAVALINK_PORT
         scheme = "https" if port == 443 else "http"
-        uri = f"{scheme}://{cfg.LAVALINK_HOST}:{port}"
+        uri    = f"{scheme}://{cfg.LAVALINK_HOST}:{port}"
         print(f"  [~] Connecting to Lavalink at {uri} ...")
         try:
             node = wavelink.Node(uri=uri, password=cfg.LAVALINK_PASSWORD)
             await wavelink.Pool.connect(nodes=[node], client=self, cache_capacity=100)
             self.lavalink_connected = True
-            print(f"  [+] Lavalink connected!")
+            print("  [+] Lavalink connected!")
         except Exception as e:
             self.lavalink_connected = False
             print(f"""
-  [!] Lavalink connection FAILED: {e}
-  ─────────────────────────────────────────────────────
-  Music commands will NOT work until Lavalink is set up.
-
-  QUICK FIX - add these 3 lines to your .env file:
+  [!] Lavalink FAILED: {e}
+  Add to .env:
     LAVALINK_HOST=lavalink.devamop.in
     LAVALINK_PORT=443
     LAVALINK_PASSWORD=DevamOP
-
-  Then restart the bot.
-  ─────────────────────────────────────────────────────
 """)
 
     async def on_ready(self):
-        lava = "Connected" if self.lavalink_connected else "NOT connected (music wont work - check .env)"
+        lava = "Connected" if self.lavalink_connected else "NOT connected"
         print(f"""
   ██████╗ ███████╗██████╗  ██████╗
   ╚════██╗██╔════╝██╔══██╗██╔═══██╗
@@ -85,12 +76,12 @@ class Zero(commands.Bot):
   ██████╔╝███████╗██║  ██║╚██████╔╝
   ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝
   Zero Music Bot - Made by Aditya</>
-  ─────────────────────────────────────
-  User      : {self.user}
-  Guilds    : {len(self.guilds)}
-  Ping      : {round(self.latency * 1000)}ms
-  Lavalink  : {lava}
-  ─────────────────────────────────────
+  ─────────────────────────────────
+  User     : {self.user}
+  Guilds   : {len(self.guilds)}
+  Ping     : {round(self.latency*1000)}ms
+  Lavalink : {lava}
+  ─────────────────────────────────
 """)
         self.loop.create_task(self._rotate_status())
 
@@ -119,36 +110,28 @@ class Zero(commands.Bot):
             return
         await self.process_commands(message)
 
-    async def on_command_error(self, ctx: commands.Context, error):
+    async def on_command_error(self, ctx, error):
         if isinstance(error, commands.CommandNotFound):
             return
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.reply(embed=err(f"Missing argument: `{error.param.name}`"), mention_author=False)
+            await ctx.send(embed=err(f"Missing argument: `{error.param.name}`"))
         elif isinstance(error, commands.BadArgument):
-            await ctx.reply(embed=err(str(error)), mention_author=False)
+            await ctx.send(embed=err(str(error)))
         elif isinstance(error, commands.CheckFailure):
             from utils.embeds import premium_wall
             if "PREMIUM_REQUIRED" in str(error):
-                await ctx.reply(embed=premium_wall(), mention_author=False)
+                await ctx.send(embed=premium_wall())
             else:
-                await ctx.reply(embed=err(str(error)), mention_author=False)
+                await ctx.send(embed=err(str(error)))
         elif isinstance(error, commands.CommandInvokeError):
             orig = error.original
-            if "no node" in str(orig).lower() or "wavelink" in type(orig).__module__:
-                await ctx.reply(
-                    embed=err(
-                        "Music is unavailable — Lavalink is not connected.\n\n"
-                        "Add these to your `.env` and restart:\n"
-                        "```\nLAVALINK_HOST=lavalink.devamop.in\n"
-                        "LAVALINK_PORT=443\n"
-                        "LAVALINK_PASSWORD=DevamOP\n```"
-                    ),
-                    mention_author=False,
-                )
-            else:
-                print(f"[CommandInvokeError] {ctx.command}: {orig}")
+            print(f"[InvokeError] {ctx.command}: {orig}")
+            if not ctx.interaction:
+                await ctx.send(embed=err(f"An error occurred: {orig}"))
         else:
             print(f"[Error] {ctx.command}: {error}")
+
+    # ── Wavelink events ───────────────────────────────────────────────────────
 
     async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload):
         self.lavalink_connected = True
