@@ -1,0 +1,31 @@
+{
+  "name": "zero-music-bot",
+  "version": "1.0.0",
+  "description": "Zero – a high quality Discord music bot with playlists, likes, premium features, and top.gg voting integration.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node ./src/index.js",
+    "deploy-commands": "node ./src/register-commands.js"
+  },
+  "keywords": [
+    "discord",
+    "music",
+    "bot",
+    "zero"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@discord-player/extractor": "^5.5.7",
+    "@discordjs/rest": "^2.4.0",
+    "@discordjs/voice": "^0.17.0",
+    "better-sqlite3": "^11.1.2",
+    "discord-api-types": "^0.37.83",
+    "discord-player": "^6.7.1",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "@top-gg/sdk": "^3.2.0"
+  }
+}
